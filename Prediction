@@ -1,0 +1,82 @@
+import tensorflow as tf
+
+import os
+os.environ["SM_FRAMEWORK"] = "tf.keras"
+
+from tensorflow.keras.models import load_model
+import segmentation_models as sm
+from tensorflow.keras import backend as K
+# Define the custom loss functions
+weights = [0.1666, 0.1666, 0.1666, 0.1666, 0.1666, 0.1666]
+dice_loss = sm.losses.DiceLoss(class_weights=weights)
+focal_loss = sm.losses.CategoricalFocalLoss()
+total_loss = dice_loss + (1 * focal_loss)  # Composite loss function
+def jacard_coef(y_true, y_pred):
+    y_true_f = K.flatten(y_true)
+    y_pred_f = K.flatten(y_pred)
+    intersection = K.sum(y_true_f * y_pred_f)
+    return (intersection + 1.0) / (K.sum(y_true_f) + K.sum(y_pred_f) - intersection + 1.0)
+# Path to model
+model_path = "/kaggle/working/satellite_standard_unet_100epochs.hdf5"
+custom_objects = {
+    "dice_loss_plus_1focal_loss": total_loss,
+    "jacard_coef": jacard_coef
+}
+
+# Load the model with custom objects
+model = load_model(model_path, custom_objects=custom_objects)
+#IOU
+y_pred=model.predict(X_test)
+y_pred_argmax=np.argmax(y_pred, axis=3)
+y_test_argmax=np.argmax(y_test, axis=3)
+#Using built in keras function for IoU
+from keras.metrics import MeanIoU
+n_classes = 6
+IOU_keras = MeanIoU(num_classes=n_classes)
+IOU_keras.update_state(y_test_argmax, y_pred_argmax)
+print("Mean IoU =", IOU_keras.result().numpy())
+import random
+test_img_number = random.randint(0, len(X_test))
+test_img = X_test[test_img_number]
+ground_truth=y_test_argmax[test_img_number]
+test_img_input=np.expand_dims(test_img, 0)
+prediction = (model.predict(test_img_input))
+predicted_img=np.argmax(prediction, axis=3)[0,:,:]
+
+
+plt.figure(figsize=(12, 8))
+plt.subplot(231)
+plt.title('Testing Image')
+plt.imshow(test_img)
+plt.subplot(232)
+plt.title('Testing Label')
+plt.imshow(ground_truth)
+plt.subplot(233)
+plt.title('Prediction on test image')
+plt.imshow(predicted_img)
+plt.show()
+# Number of images to predict
+num_images = 5
+
+# Plot setup
+plt.figure(figsize=(20, 20))
+
+for i in range(num_images):
+    test_img_number = random.randint(0, len(X_test))
+    test_img = X_test[test_img_number]
+    ground_truth=y_test_argmax[test_img_number]
+    test_img_input=np.expand_dims(test_img, 0)
+    prediction = (model.predict(test_img_input))
+    predicted_img=np.argmax(prediction, axis=3)[0,:,:]
+
+    plt.figure(figsize=(12, 8))
+    plt.subplot(231)
+    plt.title('Testing Image')
+    plt.imshow(test_img)
+    plt.subplot(232)
+    plt.title('Testing Label')
+    plt.imshow(ground_truth)
+    plt.subplot(233)
+    plt.title('Prediction on test image')
+    plt.imshow(predicted_img)
+    plt.show()
